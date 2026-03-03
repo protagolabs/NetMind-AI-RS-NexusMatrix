@@ -1,0 +1,74 @@
+# NexusMatrix 完整部署
+# 包含 Synapse homeserver + NexusMatrix service
+#
+# 使用方法:
+#   1. 生成 Synapse 配置（仅首次）:
+#      docker run --rm -v ./deploy/synapse/data:/data
+#        -e SYNAPSE_SERVER_NAME=localhost -e SYNAPSE_REPORT_STATS=no
+#        matrixdotorg/synapse:latest generate
+#   2. 启动: docker compose up -d
+#   3. 访问 NexusMatrix API: http://localhost:8953/docs
+#   4. 访问 Synapse: http://localhost:8008
+
+services:
+  # ── Matrix Homeserver (Synapse) ──
+  synapse:
+    image: matrixdotorg/synapse:latest
+    container_name: nexus-synapse
+    restart: unless-stopped
+    volumes:
+      - ./deploy/synapse/data:/data
+    ports:
+      - "8008:8008"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fSs http://localhost:8008/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - nexus-net
+
+  # ── NexusMatrix Service ──
+  nexus-matrix:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nexus-matrix
+    restart: unless-stopped
+    depends_on:
+      synapse:
+        condition: service_healthy
+    volumes:
+      - nexus-data:/app/data
+      - nexus-logs:/app/logs
+    environment:
+      - NEXUS_MATRIX_HOMESERVER_URL=http://synapse:8008
+      - NEXUS_MATRIX_SERVER_NAME=localhost
+      - NEXUS_MATRIX_REGISTRATION_SECRET=9_HimzS2a&CBS^DPyP&mLBT2Nry-e-tR=39.w&jkwf9IGkOCGH
+      - NEXUS_MATRIX_ADMIN_USER=nexus_admin
+      - NEXUS_MATRIX_ADMIN_PASSWORD=${ADMIN_PASSWORD:-nexus_admin_pass_2026}
+      - NEXUS_DATABASE_PATH=/app/data/nexus_matrix.db
+      - NEXUS_SECRET_KEY=${SECRET_KEY:-nexus-secret-change-in-production}
+      - NEXUS_LOG_LEVEL=INFO
+    ports:
+      - "8953:8953"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import httpx; httpx.get('http://localhost:8953/health').raise_for_status()\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - nexus-net
+
+volumes:
+  nexus-data:
+    name: nexus-matrix-data
+  nexus-logs:
+    name: nexus-matrix-logs
+
+networks:
+  nexus-net:
+    name: nexus-network
+    driver: bridge

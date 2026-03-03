@@ -1,0 +1,65 @@
+[project]
+name = "nexus-matrix"
+version = "0.1.0"
+description = "Matrix protocol service for NexusAgent - providing decentralized communication capabilities for AI agents"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Bin Liang"},
+]
+
+dependencies = [
+    # Web 框架
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+
+    # Matrix 客户端
+    "matrix-nio>=0.24.0",
+
+    # 异步数据库
+    "aiosqlite>=0.20.0",
+
+    # 安全
+    "passlib[bcrypt]>=1.7.4",
+    "python-jose[cryptography]>=3.3.0",
+
+    # 嵌入向量 (语义搜索，通过 OpenAI API)
+    "openai>=1.0.0",
+    "numpy>=1.26.0",
+
+    # HTTP 客户端 (Skill 包 + 内部调用)
+    "httpx>=0.27.0",
+    "aiohttp>=3.9.0",
+
+    # 工具
+    "python-dotenv>=1.0.0",
+    "loguru>=0.7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.5.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nexus_matrix"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

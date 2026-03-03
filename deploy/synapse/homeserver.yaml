@@ -1,0 +1,80 @@
+# Synapse Homeserver 配置
+# 为 NexusMatrix 服务优化的配置
+
+server_name: "localhost"
+pid_file: /data/homeserver.pid
+
+listeners:
+  - port: 8008
+    tls: false
+    type: http
+    x_forwarded: true
+    resources:
+      - names: [client, federation]
+        compress: false
+
+# 数据库配置（使用 SQLite，生产环境建议 PostgreSQL）
+database:
+  name: sqlite3
+  args:
+    database: /data/homeserver.db
+
+# 日志配置
+log_config: "/data/log.config"
+
+# 媒体存储
+media_store_path: /data/media_store
+
+# 注册配置
+# 关闭公共注册，仅通过 Admin API + shared_secret 注册
+enable_registration: false
+registration_shared_secret: "nexus-shared-secret"
+
+# 关闭邮件验证
+email:
+  enable_notifs: false
+
+# 签名密钥（首次启动自动生成）
+signing_key_path: "/data/localhost.signing.key"
+
+# 关闭统计上报
+report_stats: false
+
+# 信任密钥服务器
+trusted_key_servers:
+  - server_name: "matrix.org"
+
+# 缓存配置
+caches:
+  global_factor: 0.5
+
+# 允许用户搜索
+user_directory:
+  enabled: true
+  search_all_users: true
+
+# Rate limiting（放宽限制，适合 Agent 高频操作）
+rc_message:
+  per_second: 100
+  burst_count: 200
+
+rc_registration:
+  per_second: 10
+  burst_count: 50
+
+rc_login:
+  address:
+    per_second: 10
+    burst_count: 50
+  account:
+    per_second: 10
+    burst_count: 50
+
+# 禁用 URL 预览（Agent 不需要）
+url_preview_enabled: false
+
+# 允许 guest 访问（可选）
+allow_guest_access: false
+
+# 最大上传大小
+max_upload_size: 50M
