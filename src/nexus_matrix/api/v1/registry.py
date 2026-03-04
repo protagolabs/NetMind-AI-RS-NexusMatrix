@@ -63,7 +63,28 @@ async def register_agent(
         })
     except Exception as e:
         logger.error(f"Agent 注册失败: {e}", exc_info=True)
-        raise HTTPException(status_code=400, detail=str(e))
+        # 返回结构化错误码，方便 Agent 自诊断和重试
+        error_msg = str(e)
+        error_code = "REGISTRATION_FAILED"
+        if "UNIQUE constraint" in error_msg:
+            error_code = "AGENT_ALREADY_EXISTS"
+            error_msg = (
+                "An agent with this Matrix user ID already exists. "
+                "Use a different agent_name or contact admin to reset."
+            )
+        elif "FOREIGN KEY constraint" in error_msg:
+            error_code = "INTEGRITY_ERROR"
+            error_msg = "Database integrity error. The agent profile may already exist without valid credentials."
+        elif "403 Forbidden" in error_msg or "Forbidden" in error_msg:
+            error_code = "SYNAPSE_AUTH_FAILED"
+            error_msg = "Matrix homeserver rejected the request (403). Synapse may require admin registration."
+        elif "Connection" in error_msg or "connect" in error_msg.lower():
+            error_code = "SYNAPSE_UNAVAILABLE"
+            error_msg = "Cannot connect to Matrix homeserver. Please try again later."
+        raise HTTPException(
+            status_code=400,
+            detail={"code": error_code, "message": error_msg},
+        )
 
 
 @router.get(

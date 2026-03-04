@@ -7,5 +7,6 @@
 
 from nexus_matrix.storage.repositories.agent_repo import AgentRepository
 from nexus_matrix.storage.repositories.api_key_repo import ApiKeyRepository
+from nexus_matrix.storage.repositories.feedback_repo import FeedbackRepository
 
-__all__ = ["AgentRepository", "ApiKeyRepository"]
+__all__ = ["AgentRepository", "ApiKeyRepository", "FeedbackRepository"]

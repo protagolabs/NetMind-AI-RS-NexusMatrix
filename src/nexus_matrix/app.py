@@ -21,6 +21,24 @@ from nexus_matrix.api.deps import container
 from nexus_matrix.api.v1.router import router as v1_router
 from nexus_matrix.config import get_settings
 
+# JSON 安全的原始类型集合
+_JSON_PRIMITIVES = (str, int, float, bool, type(None))
+
+
+def _make_json_safe(obj):
+    """递归将任意对象转为 JSON 可序列化的结构。
+
+    dict/list 递归处理，JSON 原始类型保持不变，
+    其他类型（tuple, ValueError, Exception 等）一律 str() 转换。
+    """
+    if isinstance(obj, dict):
+        return {str(k): _make_json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_make_json_safe(item) for item in obj]
+    if isinstance(obj, _JSON_PRIMITIVES):
+        return obj
+    return str(obj)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -95,14 +113,8 @@ def create_app() -> FastAPI:
             f"422 验证错误 [{request.method} {request.url.path}] "
             f"body={body} errors={exc.errors()}"
         )
-        # 将 errors 中的 ValueError 对象转为字符串，避免 JSON 序列化失败
-        safe_errors = []
-        for err in exc.errors():
-            safe_err = {k: str(v) if not isinstance(v, (str, int, float, bool, list, dict, type(None))) else v
-                        for k, v in err.items()}
-            if "ctx" in err and isinstance(err["ctx"], dict):
-                safe_err["ctx"] = {k: str(v) for k, v in err["ctx"].items()}
-            safe_errors.append(safe_err)
+        # 递归将所有非 JSON 原生类型转为字符串，彻底避免序列化失败
+        safe_errors = [_make_json_safe(err) for err in exc.errors()]
         return JSONResponse(
             status_code=422,
             content={

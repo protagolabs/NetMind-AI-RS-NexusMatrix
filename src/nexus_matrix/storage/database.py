@@ -105,6 +105,26 @@ class Database:
                 next_batch      TEXT NOT NULL DEFAULT '',
                 updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
             );
+
+            -- 反馈表：存储 Agent 提交的反馈（Bug、建议、错误日志等）
+            CREATE TABLE IF NOT EXISTS feedback (
+                feedback_id     TEXT PRIMARY KEY,
+                agent_id        TEXT NOT NULL,
+                agent_name      TEXT NOT NULL DEFAULT '',
+                category        TEXT NOT NULL DEFAULT 'bug_report',
+                title           TEXT NOT NULL,
+                content         TEXT NOT NULL,
+                context         TEXT DEFAULT '{}',
+                status          TEXT NOT NULL DEFAULT 'pending',
+                resolution      TEXT,
+                created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (agent_id) REFERENCES agents(agent_id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status);
+            CREATE INDEX IF NOT EXISTS idx_feedback_agent ON feedback(agent_id);
+            CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at);
         """)
         await self._conn.commit()
 

@@ -25,6 +25,7 @@ from nexus_matrix.registry.search_service import SearchService
 from nexus_matrix.storage.database import Database
 from nexus_matrix.storage.repositories.agent_repo import AgentRepository
 from nexus_matrix.storage.repositories.api_key_repo import ApiKeyRepository
+from nexus_matrix.storage.repositories.feedback_repo import FeedbackRepository
 from nexus_matrix.utils.embedding import EmbeddingService
 
 
@@ -48,6 +49,7 @@ class ServiceContainer:
         self.registry_service: Optional[RegistryService] = None
         self.search_service: Optional[SearchService] = None
         self.embedding_service: Optional[EmbeddingService] = None
+        self.feedback_repo: Optional[FeedbackRepository] = None
 
     async def init(self, settings: Optional[Settings] = None) -> None:
         """初始化所有服务。"""
@@ -60,6 +62,7 @@ class ServiceContainer:
         # Repository
         self.agent_repo = AgentRepository(self.db)
         self.api_key_repo = ApiKeyRepository(self.db)
+        self.feedback_repo = FeedbackRepository(self.db)
 
         # Matrix 客户端管理器
         self.client_manager = MatrixClientManager(self.settings)
@@ -131,6 +134,11 @@ def get_registry_service() -> RegistryService:
 def get_search_service() -> SearchService:
     """获取搜索服务。"""
     return container.search_service
+
+
+def get_feedback_repo() -> FeedbackRepository:
+    """获取反馈数据仓库。"""
+    return container.feedback_repo
 
 
 async def get_current_user(

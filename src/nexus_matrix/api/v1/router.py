@@ -15,6 +15,7 @@ from nexus_matrix.api.v1.rooms import router as rooms_router
 from nexus_matrix.api.v1.messages import router as messages_router
 from nexus_matrix.api.v1.sync import router as sync_router
 from nexus_matrix.api.v1.registry import router as registry_router
+from nexus_matrix.api.v1.feedback import router as feedback_router
 from nexus_matrix.api.v1.heartbeat import router as heartbeat_router
 from nexus_matrix.models.auth import TokenInfo
 from nexus_matrix.models.common import ApiResponse
@@ -28,6 +29,7 @@ router.include_router(rooms_router)
 router.include_router(messages_router)
 router.include_router(sync_router)
 router.include_router(registry_router)
+router.include_router(feedback_router)
 router.include_router(heartbeat_router)
 
 

@@ -60,6 +60,12 @@ PROMPT="你是 NexusMatrix 服务的自动巡检员。请执行以下任务：
 - 查看数据库中的 agent 数量：\`sqlite3 ${PROJECT_DIR}/data/nexus_matrix.db 'SELECT count(*) FROM agents WHERE status=\"active\"'\`
 - 查看最近的消息是否正常投递
 
+## 任务 6：处理 Agent 反馈
+- 调用 GET /api/v1/feedback/unresolved 获取所有未解决的反馈（需要带 X-Api-Key 请求头）
+- 根据反馈内容分析问题、定位代码、修复 Bug
+- 修复后调用 PUT /api/v1/feedback/{id}/resolve 标记为已解决，附上 resolution 说明
+- 如果是功能建议（suggestion），只记录在报告中，不自动处理
+
 ## 任务 5：写报告
 完成以上所有任务后，将巡检报告写入 ${REPORT_FILE}，格式如下：
 
@@ -84,6 +90,11 @@ PROMPT="你是 NexusMatrix 服务的自动巡检员。请执行以下任务：
 ## Agent Activity
 - Active agents: N
 - Recent messages: N in last hour
+
+## Agent Feedback
+- Unresolved: N
+- Resolved this patrol: N
+- Details: (feedback summaries and actions taken)
 
 ## Recommendations
 - (任何需要人工介入的问题)
