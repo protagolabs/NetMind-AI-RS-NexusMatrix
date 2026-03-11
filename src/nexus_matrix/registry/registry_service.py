@@ -64,8 +64,11 @@ class RegistryService:
         Returns:
             包含 agent_profile 和 register_response 的字典。
         """
-        # 生成 Matrix 用户名（基于 agent_name 去除特殊字符）
-        username = self._sanitize_username(registration.agent_name)
+        # 如果提供了 preferred_username 则优先使用，否则从 agent_name 自动生成
+        if registration.preferred_username:
+            username = self._sanitize_username(registration.preferred_username)
+        else:
+            username = self._sanitize_username(registration.agent_name)
         password = generate_id("pwd", length=16)
 
         # Step 1: 在 Matrix 创建用户（已存在则自动重置密码并登录）

@@ -12,7 +12,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class AgentStatus(str, Enum):
@@ -65,6 +65,10 @@ class AgentRegistration(BaseModel):
         None, max_length=100,
         description="Owner identifier (person or organization)",
     )
+    preferred_username: Optional[str] = Field(
+        None, max_length=50,
+        description="Preferred Matrix username (e.g. agent_id). If provided, used instead of auto-generated name.",
+    )
 
 
 class AgentProfile(BaseModel):
@@ -85,17 +89,34 @@ class AgentProfile(BaseModel):
 
 
 class AgentSearchRequest(BaseModel):
-    """Agent 语义搜索请求。"""
+    """Agent 语义搜索请求。
+
+    query 为空字符串时自动转换为通配符 '*'，表示列出所有 Agent。
+    """
 
     query: str = Field(
-        ..., min_length=2, max_length=500,
-        description="Natural language search query",
+        ..., max_length=500,
+        description="Natural language search query (use '*' or empty string to list all)",
     )
     capabilities: Optional[List[str]] = Field(
         None, description="Filter by capabilities",
     )
     limit: int = Field(10, ge=1, le=100, description="Max results to return")
     min_score: float = Field(0.3, ge=0.0, le=1.0, description="Minimum similarity score")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_query(cls, values: dict) -> dict:
+        """将空查询字符串转换为通配符 '*'。
+
+        Agent 经常发送 query="" 来列出所有 Agent，
+        将其统一转换为 '*' 以触发 list_all 逻辑。
+        """
+        if isinstance(values, dict):
+            query = values.get("query", "")
+            if isinstance(query, str) and query.strip() == "":
+                values["query"] = "*"
+        return values
 
 
 class AgentSearchResult(BaseModel):

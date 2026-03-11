@@ -8,6 +8,7 @@
 包括中间件、路由挂载、生命周期管理。
 """
 
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -16,6 +17,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from loguru import logger
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+
+# 匹配无效 JSON 转义序列（\后跟非法字符，且前面不是另一个\）
+# 合法的 JSON 转义: \" \\ \/ \b \f \n \r \t \uXXXX
+# 负向后瞻确保不误处理 \\! 这种合法的 "字面反斜杠+字符" 组合
+_INVALID_JSON_ESCAPE_RE = re.compile(r'(?<!\\)\\([^"\\/bfnrtu])')
 
 from nexus_matrix.api.deps import container
 from nexus_matrix.api.v1.router import router as v1_router
@@ -72,6 +80,40 @@ async def lifespan(app: FastAPI):
     logger.info("NexusMatrix 服务已关闭")
 
 
+class JsonEscapeSanitizerMiddleware(BaseHTTPMiddleware):
+    """修复请求体中无效的 JSON 转义序列。
+
+    部分 Agent（尤其是 LLM 生成的 JSON）会错误地对 Matrix room ID 中的
+    '!' 进行转义，发送 '\\!' 这样的无效 JSON 转义。此中间件在 JSON 解析
+    之前拦截请求体，将无效转义还原为原始字符。
+
+    仅对 Content-Type 为 application/json 的 POST/PUT/PATCH 请求生效。
+    """
+
+    async def dispatch(self, request: StarletteRequest, call_next):
+        content_type = request.headers.get("content-type", "")
+        if (
+            request.method in ("POST", "PUT", "PATCH")
+            and "application/json" in content_type
+        ):
+            body = await request.body()
+            try:
+                text = body.decode("utf-8")
+            except UnicodeDecodeError:
+                return await call_next(request)
+
+            sanitized = _INVALID_JSON_ESCAPE_RE.sub(r'\1', text)
+            if sanitized != text:
+                logger.debug(
+                    f"JSON 转义修复 [{request.method} {request.url.path}]: "
+                    f"修复了无效转义序列"
+                )
+                # 用修复后的 body 替换原始请求体
+                request._body = sanitized.encode("utf-8")
+
+        return await call_next(request)
+
+
 def create_app() -> FastAPI:
     """创建 FastAPI 应用实例。"""
     settings = get_settings()
@@ -89,6 +131,10 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
     )
+
+    # JSON 容错中间件 — 修复 Agent 发送的无效 JSON 转义序列（如 \! → !）
+    # 必须在 CORS 之前添加，使其在请求处理链中更早生效
+    app.add_middleware(JsonEscapeSanitizerMiddleware)
 
     # CORS 中间件
     app.add_middleware(

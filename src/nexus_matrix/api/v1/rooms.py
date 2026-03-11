@@ -17,6 +17,9 @@ from nio import AsyncClient
 from nexus_matrix.api.deps import get_matrix_client, get_room_service
 from nexus_matrix.core.room_service import RoomService
 from nexus_matrix.models.common import ApiResponse
+from nexus_matrix.api.deps import get_message_service
+from nexus_matrix.core.message_service import MessageService
+from nexus_matrix.models.messages import MarkReadRequest
 from nexus_matrix.models.rooms import (
     CreateRoomRequest,
     CreateRoomResponse,
@@ -27,6 +30,38 @@ from nexus_matrix.models.rooms import (
 )
 
 router = APIRouter(prefix="/rooms", tags=["Rooms"])
+
+
+def _clean_room_id(room_id: str) -> str:
+    """清理 room_id 路径参数中常见的转义问题。
+
+    Agent 常将 '!' 转义为 '\\!'，导致路径参数包含前导反斜杠。
+    例如: '\\!roomId:server' → '!roomId:server'
+
+    Args:
+        room_id: 原始 room_id 路径参数。
+
+    Returns:
+        清理后的 room_id。
+    """
+    return room_id.lstrip("\\")
+
+
+@router.get(
+    "",
+    response_model=ApiResponse[List[RoomInfo]],
+    summary="List all joined rooms (root alias)",
+)
+async def list_rooms_root(
+    client: AsyncClient = Depends(get_matrix_client),
+    room_service: RoomService = Depends(get_room_service),
+):
+    """列出所有已加入的房间（根路径别名，等同于 /rooms/joined）。"""
+    try:
+        rooms = await room_service.get_joined_rooms(client)
+        return ApiResponse.ok(rooms)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post(
@@ -78,6 +113,7 @@ async def leave_room(
     room_service: RoomService = Depends(get_room_service),
 ):
     """离开房间。"""
+    room_id = _clean_room_id(room_id)
     try:
         await room_service.leave_room(client, room_id)
         return ApiResponse.ok()
@@ -97,6 +133,7 @@ async def invite_user(
     room_service: RoomService = Depends(get_room_service),
 ):
     """邀请用户到房间。"""
+    room_id = _clean_room_id(room_id)
     try:
         await room_service.invite_user(client, room_id, request.user_id)
         return ApiResponse.ok()
@@ -117,6 +154,7 @@ async def kick_user(
     room_service: RoomService = Depends(get_room_service),
 ):
     """将用户踢出房间。"""
+    room_id = _clean_room_id(room_id)
     try:
         await room_service.kick_user(client, room_id, request.user_id, reason)
         return ApiResponse.ok()
@@ -137,6 +175,7 @@ async def ban_user(
     room_service: RoomService = Depends(get_room_service),
 ):
     """封禁用户。"""
+    room_id = _clean_room_id(room_id)
     try:
         await room_service.ban_user(client, room_id, request.user_id, reason)
         return ApiResponse.ok()
@@ -156,6 +195,7 @@ async def unban_user(
     room_service: RoomService = Depends(get_room_service),
 ):
     """解除封禁。"""
+    room_id = _clean_room_id(room_id)
     try:
         await room_service.unban_user(client, room_id, request.user_id)
         return ApiResponse.ok()
@@ -208,6 +248,7 @@ async def get_room_info_alias(
     room_service: RoomService = Depends(get_room_service),
 ):
     """获取房间详情（/rooms/{room_id} 的别名）。"""
+    room_id = _clean_room_id(room_id)
     try:
         info = await room_service.get_room_info(client, room_id)
         return ApiResponse.ok(info)
@@ -226,11 +267,43 @@ async def get_room_members(
     room_service: RoomService = Depends(get_room_service),
 ):
     """获取房间成员列表。"""
+    room_id = _clean_room_id(room_id)
     try:
         members = await room_service.get_room_members(client, room_id)
         return ApiResponse.ok(members)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.api_route(
+    "/read-marker",
+    methods=["POST", "PUT"],
+    response_model=ApiResponse,
+    summary="Set read marker (alias for mark-read)",
+)
+async def read_marker(
+    request: MarkReadRequest,
+    client: AsyncClient = Depends(get_matrix_client),
+    message_service: MessageService = Depends(get_message_service),
+):
+    """设置已读标记 — Agent 常尝试的 /rooms/read-marker 路径别名。
+
+    接受 room_id 和可选 event_id，委托给消息服务完成标记。
+    """
+    try:
+        if request.event_id:
+            await message_service.mark_read(client, request.room_id, request.event_id)
+        else:
+            history = await message_service.get_messages(
+                client, request.room_id, limit=1
+            )
+            if history.messages:
+                await message_service.mark_read(
+                    client, request.room_id, history.messages[0].event_id
+                )
+        return ApiResponse.ok()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get(
@@ -244,6 +317,7 @@ async def get_room_info(
     room_service: RoomService = Depends(get_room_service),
 ):
     """获取房间详情。"""
+    room_id = _clean_room_id(room_id)
     try:
         info = await room_service.get_room_info(client, room_id)
         return ApiResponse.ok(info)

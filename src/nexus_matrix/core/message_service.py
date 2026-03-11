@@ -175,8 +175,8 @@ class MessageService:
             return MessageHistory(
                 room_id=room_id,
                 messages=messages,
-                start=response.start,
-                end=response.end,
+                start=response.start or "",
+                end=response.end or "",
                 has_more=len(messages) >= limit,
             )
         else:

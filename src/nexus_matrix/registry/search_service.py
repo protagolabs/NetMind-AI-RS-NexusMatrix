@@ -49,6 +49,10 @@ class SearchService:
         Returns:
             按相似度降序排列的搜索结果列表。
         """
+        # 通配符 '*' 表示列出所有 Agent
+        if request.query.strip() == "*":
+            return await self._list_all(request)
+
         try:
             # 编码查询文本
             query_embedding = self._embedding_service.encode(request.query)
@@ -92,6 +96,24 @@ class SearchService:
 
         # 限制结果数
         return results[: request.limit]
+
+    async def _list_all(self, request: AgentSearchRequest) -> List[AgentSearchResult]:
+        """列出所有活跃 Agent（通配符搜索）。
+
+        Args:
+            request: 搜索请求（用于 capabilities 过滤和 limit 限制）。
+
+        Returns:
+            所有匹配的 Agent，score 固定为 1.0。
+        """
+        all_agents = await self._agent_repo.list_active(limit=request.limit)
+        results = []
+        for agent in all_agents:
+            if request.capabilities:
+                if not any(cap in agent.capabilities for cap in request.capabilities):
+                    continue
+            results.append(AgentSearchResult(agent=agent, score=1.0))
+        return results
 
     async def _fallback_keyword_search(
         self, request: AgentSearchRequest
