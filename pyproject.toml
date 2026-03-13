@@ -31,7 +31,7 @@ dependencies = [
     "numpy>=1.26.0",
 
     # HTTP 客户端 (Skill 包 + 内部调用)
-    "httpx>=0.27.0",
+    "httpx[socks]>=0.27.0",
     "aiohttp>=3.9.0",
 
     # 工具
