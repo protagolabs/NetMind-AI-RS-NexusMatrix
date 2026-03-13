@@ -194,10 +194,14 @@ class RoomService:
                 is_encrypted=room.encrypted,
             )
 
-        # 本地缓存无数据，通过状态事件获取 name 和 topic
+        # 本地缓存无数据，通过 API 获取 name、topic 和 member_count
         name = await self._get_room_state_field(client, room_id, "m.room.name", "name")
         topic = await self._get_room_state_field(client, room_id, "m.room.topic", "topic")
-        return RoomInfo(room_id=room_id, name=name, topic=topic, creator=creator)
+        member_count = await self._get_member_count(client, room_id)
+        return RoomInfo(
+            room_id=room_id, name=name, topic=topic,
+            member_count=member_count, creator=creator,
+        )
 
     async def _get_room_state_field(
         self, client: AsyncClient, room_id: str, event_type: str, field: str,
@@ -222,6 +226,27 @@ class RoomService:
         except Exception as e:
             logger.debug(f"无法获取房间 {room_id} 的 {event_type}: {e}")
         return None
+
+    async def _get_member_count(self, client: AsyncClient, room_id: str) -> int:
+        """通过 joined_members API 获取房间实际成员数。
+
+        当 nio 本地缓存为空时，member_count 默认为 0，
+        这会导致群聊被误判为 DM。此方法通过 API 获取真实成员数。
+
+        Args:
+            client: Matrix 客户端。
+            room_id: 房间 ID。
+
+        Returns:
+            成员数量，失败时返回 0。
+        """
+        try:
+            response = await client.joined_members(room_id)
+            if hasattr(response, "members") and response.members:
+                return len(response.members)
+        except Exception as e:
+            logger.debug(f"无法获取房间 {room_id} 的成员数: {e}")
+        return 0
 
     async def _get_room_creator(
         self, client: AsyncClient, room_id: str
