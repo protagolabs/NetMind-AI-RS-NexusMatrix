@@ -77,6 +77,7 @@ class RoomInfo(BaseModel):
     topic: Optional[str] = Field(None, description="Room topic")
     canonical_alias: Optional[str] = Field(None, description="Primary room alias")
     member_count: int = Field(0, description="Number of joined members")
+    creator: Optional[str] = Field(None, description="Matrix user ID of the room creator")
     is_direct: bool = Field(False, description="Whether this is a DM room")
     is_encrypted: bool = Field(False, description="Whether E2EE is enabled")
 

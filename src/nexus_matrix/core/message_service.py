@@ -161,6 +161,12 @@ class MessageService:
             for event in response.chunk:
                 # 只处理消息事件
                 if hasattr(event, "body"):
+                    # Extract full content dict from nio event source
+                    # (contains m.mentions, formatted_body, etc.)
+                    raw_content = None
+                    if hasattr(event, "source") and isinstance(event.source, dict):
+                        raw_content = event.source.get("content")
+
                     messages.append(MessageEvent(
                         event_id=event.event_id,
                         room_id=room_id,
@@ -170,6 +176,7 @@ class MessageService:
                         formatted_body=getattr(event, "formatted_body", None),
                         timestamp=event.server_timestamp,
                         event_type="m.room.message",
+                        content=raw_content,
                     ))
 
             return MessageHistory(

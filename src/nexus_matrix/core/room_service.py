@@ -170,6 +170,7 @@ class RoomService:
         """获取房间详细信息。
 
         从客户端本地缓存和 Matrix API 中收集房间元数据。
+        creator 通过 m.room.create 状态事件获取（nio.MatrixRoom 没有 creator 属性）。
 
         Args:
             client: 操作者的 Matrix 客户端。
@@ -178,6 +179,9 @@ class RoomService:
         Returns:
             房间详细信息。
         """
+        # 获取 creator：从 m.room.create 状态事件中提取
+        creator = await self._get_room_creator(client, room_id)
+
         room = client.rooms.get(room_id)
         if room:
             return RoomInfo(
@@ -186,11 +190,37 @@ class RoomService:
                 topic=room.topic,
                 canonical_alias=room.canonical_alias,
                 member_count=room.member_count,
+                creator=creator,
                 is_encrypted=room.encrypted,
             )
 
         # 如果本地缓存无数据，返回基础信息
-        return RoomInfo(room_id=room_id)
+        return RoomInfo(room_id=room_id, creator=creator)
+
+    async def _get_room_creator(
+        self, client: AsyncClient, room_id: str
+    ) -> Optional[str]:
+        """从 m.room.create 状态事件获取房间创建者。
+
+        nio.MatrixRoom 没有 creator 属性，必须通过状态事件 API 获取。
+
+        Args:
+            client: Matrix 客户端。
+            room_id: 房间 ID。
+
+        Returns:
+            创建者的 Matrix user ID，或 None。
+        """
+        try:
+            response = await client.room_get_state_event(
+                room_id, "m.room.create", ""
+            )
+            if isinstance(response, RoomGetStateEventResponse):
+                # m.room.create 事件的 content 包含 creator 字段
+                return response.content.get("creator")
+        except Exception as e:
+            logger.debug(f"无法获取房间 {room_id} 的 creator: {e}")
+        return None
 
     async def get_joined_rooms(self, client: AsyncClient) -> List[RoomInfo]:
         """获取已加入的所有房间列表。"""
