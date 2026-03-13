@@ -169,8 +169,8 @@ class RoomService:
     async def get_room_info(self, client: AsyncClient, room_id: str) -> RoomInfo:
         """获取房间详细信息。
 
-        从客户端本地缓存和 Matrix API 中收集房间元数据。
-        creator 通过 m.room.create 状态事件获取（nio.MatrixRoom 没有 creator 属性）。
+        始终从 Matrix API（状态事件 + joined_members）获取数据，
+        不依赖 nio 的内存缓存（client.rooms），避免服务重启后数据丢失。
 
         Args:
             client: 操作者的 Matrix 客户端。
@@ -179,42 +179,39 @@ class RoomService:
         Returns:
             房间详细信息。
         """
-        # 获取 creator：从 m.room.create 状态事件中提取
-        creator = await self._get_room_creator(client, room_id)
+        # 并发获取所有字段，减少总耗时
+        import asyncio
+        name_task = self._get_state_field(client, room_id, "m.room.name", "name")
+        topic_task = self._get_state_field(client, room_id, "m.room.topic", "topic")
+        alias_task = self._get_state_field(client, room_id, "m.room.canonical_alias", "alias")
+        creator_task = self._get_state_field(client, room_id, "m.room.create", "creator")
+        encrypted_task = self._get_state_field(client, room_id, "m.room.encryption", "algorithm")
+        member_count_task = self._get_member_count(client, room_id)
 
-        room = client.rooms.get(room_id)
-        if room:
-            return RoomInfo(
-                room_id=room_id,
-                name=room.name,
-                topic=room.topic,
-                canonical_alias=room.canonical_alias,
-                member_count=room.member_count,
-                creator=creator,
-                is_encrypted=room.encrypted,
-            )
-
-        # 本地缓存无数据，通过 API 获取 name、topic 和 member_count
-        name = await self._get_room_state_field(client, room_id, "m.room.name", "name")
-        topic = await self._get_room_state_field(client, room_id, "m.room.topic", "topic")
-        member_count = await self._get_member_count(client, room_id)
-        return RoomInfo(
-            room_id=room_id, name=name, topic=topic,
-            member_count=member_count, creator=creator,
+        name, topic, alias, creator, encryption_algo, member_count = await asyncio.gather(
+            name_task, topic_task, alias_task, creator_task, encrypted_task, member_count_task,
         )
 
-    async def _get_room_state_field(
+        return RoomInfo(
+            room_id=room_id,
+            name=name,
+            topic=topic,
+            canonical_alias=alias,
+            member_count=member_count,
+            creator=creator,
+            is_encrypted=encryption_algo is not None,
+        )
+
+    async def _get_state_field(
         self, client: AsyncClient, room_id: str, event_type: str, field: str,
     ) -> Optional[str]:
         """从房间状态事件中获取指定字段。
-
-        当 nio 本地缓存无数据时（如服务重启后），通过状态事件 API 获取房间元数据。
 
         Args:
             client: Matrix 客户端。
             room_id: 房间 ID。
             event_type: 状态事件类型（如 m.room.name）。
-            field: 要提取的字段名。
+            field: content 中要提取的字段名。
 
         Returns:
             字段值，或 None。
@@ -229,9 +226,6 @@ class RoomService:
 
     async def _get_member_count(self, client: AsyncClient, room_id: str) -> int:
         """通过 joined_members API 获取房间实际成员数。
-
-        当 nio 本地缓存为空时，member_count 默认为 0，
-        这会导致群聊被误判为 DM。此方法通过 API 获取真实成员数。
 
         Args:
             client: Matrix 客户端。
@@ -248,41 +242,16 @@ class RoomService:
             logger.debug(f"无法获取房间 {room_id} 的成员数: {e}")
         return 0
 
-    async def _get_room_creator(
-        self, client: AsyncClient, room_id: str
-    ) -> Optional[str]:
-        """从 m.room.create 状态事件获取房间创建者。
-
-        nio.MatrixRoom 没有 creator 属性，必须通过状态事件 API 获取。
-
-        Args:
-            client: Matrix 客户端。
-            room_id: 房间 ID。
-
-        Returns:
-            创建者的 Matrix user ID，或 None。
-        """
-        try:
-            response = await client.room_get_state_event(
-                room_id, "m.room.create", ""
-            )
-            if isinstance(response, RoomGetStateEventResponse):
-                # m.room.create 事件的 content 包含 creator 字段
-                return response.content.get("creator")
-        except Exception as e:
-            logger.debug(f"无法获取房间 {room_id} 的 creator: {e}")
-        return None
-
     async def get_joined_rooms(self, client: AsyncClient) -> List[RoomInfo]:
-        """获取已加入的所有房间列表。"""
+        """获取已加入的所有房间列表。
+
+        通过 Matrix API 获取房间 ID 列表，再逐个查询详细信息。
+        不依赖 nio 内存缓存。
+        """
         response = await client.joined_rooms()
         if not isinstance(response, JoinedRoomsResponse):
-            logger.warning(f"获取已加入房间失败: {response}")
-            # 回退：从客户端本地缓存获取
-            return [
-                await self.get_room_info(client, room_id)
-                for room_id in client.rooms
-            ]
+            raise RuntimeError(f"获取已加入房间失败: {response}")
+
         rooms = []
         for room_id in response.rooms:
             info = await self.get_room_info(client, room_id)
