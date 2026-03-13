@@ -24,15 +24,33 @@ class MessageType(str, Enum):
 
 
 class SendMessageRequest(BaseModel):
-    """发送消息请求。
+    """Send message request.
 
-    兼容多种字段名：
-    - body / text / message / content 均可作为消息正文
-    - room_id 为目标房间 ID
+    Accepts multiple field names for the message body:
+    - body / text / message / content are all accepted as message text
+    - room_id is the target room ID
 
-    content 字段同时兼容字符串和 Matrix 事件对象格式：
-    - 字符串: "hello" → 直接作为消息正文
-    - 对象: {"msgtype": "m.text", "body": "hello"} → 提取 body 字段
+    The content field accepts both string and Matrix event object formats:
+    - String: "hello" → used directly as message body
+    - Object: {"msgtype": "m.text", "body": "hello"} → body field extracted
+
+    To @mention users, include "m.mentions" in extra_content and use
+    formatted_body for the HTML pill:
+
+        {
+            "room_id": "!abc:server",
+            "body": "@alice Hello!",
+            "formatted_body": "<a href='https://matrix.to/#/@alice:server'>@alice</a> Hello!",
+            "extra_content": {
+                "m.mentions": {
+                    "user_ids": ["@alice:server"]
+                }
+            }
+        }
+
+    To @mention everyone in a room:
+
+        "extra_content": { "m.mentions": { "room": true } }
     """
 
     room_id: str = Field(..., description="Target room ID")
