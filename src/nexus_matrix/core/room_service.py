@@ -194,8 +194,34 @@ class RoomService:
                 is_encrypted=room.encrypted,
             )
 
-        # 如果本地缓存无数据，返回基础信息
-        return RoomInfo(room_id=room_id, creator=creator)
+        # 本地缓存无数据，通过状态事件获取 name 和 topic
+        name = await self._get_room_state_field(client, room_id, "m.room.name", "name")
+        topic = await self._get_room_state_field(client, room_id, "m.room.topic", "topic")
+        return RoomInfo(room_id=room_id, name=name, topic=topic, creator=creator)
+
+    async def _get_room_state_field(
+        self, client: AsyncClient, room_id: str, event_type: str, field: str,
+    ) -> Optional[str]:
+        """从房间状态事件中获取指定字段。
+
+        当 nio 本地缓存无数据时（如服务重启后），通过状态事件 API 获取房间元数据。
+
+        Args:
+            client: Matrix 客户端。
+            room_id: 房间 ID。
+            event_type: 状态事件类型（如 m.room.name）。
+            field: 要提取的字段名。
+
+        Returns:
+            字段值，或 None。
+        """
+        try:
+            response = await client.room_get_state_event(room_id, event_type, "")
+            if isinstance(response, RoomGetStateEventResponse):
+                return response.content.get(field)
+        except Exception as e:
+            logger.debug(f"无法获取房间 {room_id} 的 {event_type}: {e}")
+        return None
 
     async def _get_room_creator(
         self, client: AsyncClient, room_id: str
