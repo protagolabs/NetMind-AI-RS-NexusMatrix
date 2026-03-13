@@ -42,7 +42,8 @@ class Settings(BaseSettings):
     matrix_homeserver_url: str = "http://localhost:8008"
     matrix_server_name: str = "localhost"
     # Synapse 共享注册密钥，用于程序化创建用户
-    matrix_registration_secret: Optional[str] = None
+    # 默认值与 deploy/synapse/homeserver.yaml 模板中的 registration_shared_secret 一致
+    matrix_registration_secret: str = "9_HimzS2a&CBS^DPyP&mLBT2Nry-e-tR=39.w&jkwf9IGkOCGH"
     # 管理员账户凭据（服务启动时自动创建）
     matrix_admin_user: str = "nexus_admin"
     matrix_admin_password: str = "nexus_admin_password"
