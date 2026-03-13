@@ -2,10 +2,10 @@
 @file_name: room_service.py
 @author: Bin Liang
 @date: 2026-03-03
-@description: 房间管理服务
+@description: Room management service.
 
-封装 Matrix 房间的创建、加入、邀请、查询等操作。
-通过 MatrixClientManager 获取对应 Agent 的客户端执行操作。
+Wraps Matrix room operations: create, join, invite, query, etc.
+Uses MatrixClientManager to obtain the corresponding Agent's client.
 """
 
 from typing import List, Optional
@@ -38,10 +38,10 @@ from nexus_matrix.models.rooms import (
 
 
 class RoomService:
-    """房间管理服务。
+    """Room management service.
 
-    提供 Matrix 房间的完整生命周期管理：
-    创建、加入、离开、邀请、踢人、封禁、查询信息等。
+    Provides full lifecycle management for Matrix rooms:
+    create, join, leave, invite, kick, ban, query info, etc.
     """
 
     def __init__(self, client_manager: MatrixClientManager) -> None:
@@ -50,19 +50,19 @@ class RoomService:
     async def create_room(
         self, client: AsyncClient, request: CreateRoomRequest
     ) -> CreateRoomResponse:
-        """创建新房间。
+        """Create a new room.
 
         Args:
-            client: 操作者的 Matrix 客户端。
-            request: 创建房间请求。
+            client: The operator's Matrix client.
+            request: Room creation request.
 
         Returns:
-            创建结果（包含 room_id）。
+            Creation result (contains room_id).
 
         Raises:
-            RuntimeError: 创建失败。
+            RuntimeError: If creation fails.
         """
-        # 构造 nio 参数
+        # Build nio kwargs
         kwargs = {
             "name": request.name,
             "topic": request.topic,
@@ -70,13 +70,13 @@ class RoomService:
             "is_direct": request.is_direct,
         }
 
-        # 映射 visibility
+        # Map visibility
         if request.visibility == RoomVisibility.PUBLIC:
             kwargs["visibility"] = NioRoomVisibility.public
         else:
             kwargs["visibility"] = NioRoomVisibility.private
 
-        # 映射 preset
+        # Map preset
         preset_map = {
             RoomPreset.PRIVATE_CHAT: NioRoomPreset.private_chat,
             RoomPreset.PUBLIC_CHAT: NioRoomPreset.public_chat,
@@ -95,91 +95,92 @@ class RoomService:
         response = await client.room_create(**kwargs)
 
         if isinstance(response, RoomCreateResponse):
-            logger.info(f"房间已创建: {response.room_id}")
+            logger.info(f"Room created: {response.room_id}")
             alias = f"#{request.room_alias}:{self._client_manager.server_name}" if request.room_alias else None
             return CreateRoomResponse(room_id=response.room_id, room_alias=alias)
         else:
             raise RuntimeError(f"Failed to create room: {response}")
 
     async def join_room(self, client: AsyncClient, room_id_or_alias: str) -> str:
-        """加入房间。
+        """Join a room.
 
         Args:
-            client: 操作者的 Matrix 客户端。
-            room_id_or_alias: 房间 ID 或别名。
+            client: The operator's Matrix client.
+            room_id_or_alias: Room ID or alias.
 
         Returns:
-            实际的 room_id。
+            The actual room_id.
         """
         response = await client.join(room_id_or_alias)
         if isinstance(response, JoinResponse):
-            logger.info(f"已加入房间: {response.room_id}")
+            logger.info(f"Joined room: {response.room_id}")
             return response.room_id
         else:
             raise RuntimeError(f"Failed to join room: {response}")
 
     async def leave_room(self, client: AsyncClient, room_id: str) -> None:
-        """离开房间。"""
+        """Leave a room."""
         response = await client.room_leave(room_id)
         if isinstance(response, RoomLeaveResponse):
-            logger.info(f"已离开房间: {room_id}")
+            logger.info(f"Left room: {room_id}")
         else:
             raise RuntimeError(f"Failed to leave room: {response}")
 
     async def invite_user(
         self, client: AsyncClient, room_id: str, user_id: str
     ) -> None:
-        """邀请用户加入房间。"""
+        """Invite a user to a room."""
         response = await client.room_invite(room_id, user_id)
         if isinstance(response, RoomInviteResponse):
-            logger.info(f"已邀请 {user_id} 到房间 {room_id}")
+            logger.info(f"Invited {user_id} to room {room_id}")
         else:
             raise RuntimeError(f"Failed to invite user: {response}")
 
     async def kick_user(
         self, client: AsyncClient, room_id: str, user_id: str, reason: str = ""
     ) -> None:
-        """将用户踢出房间。"""
+        """Kick a user from a room."""
         response = await client.room_kick(room_id, user_id, reason=reason)
         if isinstance(response, RoomKickResponse):
-            logger.info(f"已将 {user_id} 踢出房间 {room_id}")
+            logger.info(f"Kicked {user_id} from room {room_id}")
         else:
             raise RuntimeError(f"Failed to kick user: {response}")
 
     async def ban_user(
         self, client: AsyncClient, room_id: str, user_id: str, reason: str = ""
     ) -> None:
-        """封禁用户。"""
+        """Ban a user from a room."""
         response = await client.room_ban(room_id, user_id, reason=reason)
         if isinstance(response, RoomBanResponse):
-            logger.info(f"已封禁 {user_id} 于房间 {room_id}")
+            logger.info(f"Banned {user_id} from room {room_id}")
         else:
             raise RuntimeError(f"Failed to ban user: {response}")
 
     async def unban_user(
         self, client: AsyncClient, room_id: str, user_id: str
     ) -> None:
-        """解除封禁。"""
+        """Unban a user from a room."""
         response = await client.room_unban(room_id, user_id)
         if isinstance(response, RoomUnbanResponse):
-            logger.info(f"已解封 {user_id} 于房间 {room_id}")
+            logger.info(f"Unbanned {user_id} from room {room_id}")
         else:
             raise RuntimeError(f"Failed to unban user: {response}")
 
     async def get_room_info(self, client: AsyncClient, room_id: str) -> RoomInfo:
-        """获取房间详细信息。
+        """Get detailed room information.
 
-        始终从 Matrix API（状态事件 + joined_members）获取数据，
-        不依赖 nio 的内存缓存（client.rooms），避免服务重启后数据丢失。
+        Always fetches from Matrix API (state events + joined_members),
+        never relies on nio's in-memory cache (client.rooms) which is
+        lost on server restart.
 
         Args:
-            client: 操作者的 Matrix 客户端。
-            room_id: 房间 ID。
+            client: The operator's Matrix client.
+            room_id: Room ID.
 
         Returns:
-            房间详细信息。
+            Detailed room information.
         """
-        # 并发获取所有字段，减少总耗时
+        # Fetch all fields concurrently to minimize total latency
         import asyncio
         name_task = self._get_state_field(client, room_id, "m.room.name", "name")
         topic_task = self._get_state_field(client, room_id, "m.room.topic", "topic")
@@ -205,52 +206,52 @@ class RoomService:
     async def _get_state_field(
         self, client: AsyncClient, room_id: str, event_type: str, field: str,
     ) -> Optional[str]:
-        """从房间状态事件中获取指定字段。
+        """Extract a single field from a room state event.
 
         Args:
-            client: Matrix 客户端。
-            room_id: 房间 ID。
-            event_type: 状态事件类型（如 m.room.name）。
-            field: content 中要提取的字段名。
+            client: Matrix client.
+            room_id: Room ID.
+            event_type: State event type (e.g. m.room.name).
+            field: Key to extract from the event content.
 
         Returns:
-            字段值，或 None。
+            The field value, or None if unavailable.
         """
         try:
             response = await client.room_get_state_event(room_id, event_type, "")
             if isinstance(response, RoomGetStateEventResponse):
                 return response.content.get(field)
         except Exception as e:
-            logger.debug(f"无法获取房间 {room_id} 的 {event_type}: {e}")
+            logger.debug(f"Failed to get {event_type} for room {room_id}: {e}")
         return None
 
     async def _get_member_count(self, client: AsyncClient, room_id: str) -> int:
-        """通过 joined_members API 获取房间实际成员数。
+        """Get the actual member count via the joined_members API.
 
         Args:
-            client: Matrix 客户端。
-            room_id: 房间 ID。
+            client: Matrix client.
+            room_id: Room ID.
 
         Returns:
-            成员数量，失败时返回 0。
+            Number of joined members, or 0 on failure.
         """
         try:
             response = await client.joined_members(room_id)
             if hasattr(response, "members") and response.members:
                 return len(response.members)
         except Exception as e:
-            logger.debug(f"无法获取房间 {room_id} 的成员数: {e}")
+            logger.debug(f"Failed to get member count for room {room_id}: {e}")
         return 0
 
     async def get_joined_rooms(self, client: AsyncClient) -> List[RoomInfo]:
-        """获取已加入的所有房间列表。
+        """List all joined rooms.
 
-        通过 Matrix API 获取房间 ID 列表，再逐个查询详细信息。
-        不依赖 nio 内存缓存。
+        Fetches room IDs via Matrix API, then queries detailed info for each.
+        Does not rely on nio's in-memory cache.
         """
         response = await client.joined_rooms()
         if not isinstance(response, JoinedRoomsResponse):
-            raise RuntimeError(f"获取已加入房间失败: {response}")
+            raise RuntimeError(f"Failed to list joined rooms: {response}")
 
         rooms = []
         for room_id in response.rooms:
@@ -261,11 +262,10 @@ class RoomService:
     async def get_room_members(
         self, client: AsyncClient, room_id: str
     ) -> List[RoomMember]:
-        """获取房间成员列表。
+        """Get the list of joined members in a room.
 
-        nio joined_members 返回 JoinedMembersResponse，
-        其 members 是 List[RoomMember(nio)]（nio 的 RoomMember 对象列表）。
-        每个对象有 user_id, display_name, avatar_url 属性。
+        Uses nio's joined_members API which returns JoinedMembersResponse
+        with a list of member objects (user_id, display_name, avatar_url).
         """
         response = await client.joined_members(room_id)
         members = []
@@ -278,5 +278,5 @@ class RoomService:
                     avatar_url=getattr(member, "avatar_url", None),
                 ))
         else:
-            logger.warning(f"获取房间成员失败: {response}")
+            logger.warning(f"Failed to get room members: {response}")
         return members
